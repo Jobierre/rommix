@@ -34,7 +34,7 @@ const LAUNCHER = join(import.meta.dirname, 'rommix-launcher.sh')
  *
  * Some of what the launcher promises is a promise about the Linux shell and
  * kernel it ships to inside the image — how a dead pipe ends a process, what
- * `/proc` says about it. Another system's `/bin/sh` answers those differently,
+ * `/proc` says about it. Another OS's `/bin/sh` answers those differently,
  * which says nothing about the machines the script actually runs on.
  */
 const LINUX_ONLY = process.platform !== 'linux' && 'depends on the Linux shell and kernel'

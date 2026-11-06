@@ -29,6 +29,16 @@ import { join } from 'node:path'
 
 const LAUNCHER = join(import.meta.dirname, 'rommix-launcher.sh')
 
+/**
+ * Why a test is skipped off Linux, or false where it runs.
+ *
+ * Some of what the launcher promises is a promise about the Linux shell and
+ * kernel it ships to inside the image — how a dead pipe ends a process, what
+ * `/proc` says about it. Another system's `/bin/sh` answers those differently,
+ * which says nothing about the machines the script actually runs on.
+ */
+const LINUX_ONLY = process.platform !== 'linux' && 'depends on the Linux shell and kernel'
+
 interface Launch {
   /** What the stand-in binary was handed, which is the command line RomMix gets. */
   argv: string[]
@@ -237,7 +247,7 @@ describe('what it refuses to let stop a launch', () => {
     )
   })
 
-  test('and a console nobody is reading any more', () => {
+  test('and a console nobody is reading any more', { skip: LINUX_ONLY }, () => {
     // A reader that has gone delivers SIGPIPE, which ends a shell before any
     // status can be tested — so the write is made under an ignored one.
     const dir = scratch('rommix-pipe-')
@@ -262,30 +272,34 @@ describe('what it refuses to let stop a launch', () => {
     ])
   })
 
-  test('and a root it cannot write to, with nobody reading the console either', () => {
-    // The two together, which is the pair that used to be fatal: the shell's
-    // own complaint about the unwritable file went to a pipe whose reader had
-    // gone, and SIGPIPE ended it before the exec.
-    const dir = scratch('rommix-both-')
-    writeFileSync(join(dir, 'rommix'), readFileSync(LAUNCHER))
-    chmodSync(join(dir, 'rommix'), 0o755)
-    writeFileSync(join(dir, 'rommix.bin'), `#!/bin/sh\nprintf '%s\\n' "$@" > ${dir}/argv\n`)
-    chmodSync(join(dir, 'rommix.bin'), 0o755)
+  test(
+    'and a root it cannot write to, with nobody reading the console either',
+    { skip: LINUX_ONLY },
+    () => {
+      // The two together, which is the pair that used to be fatal: the shell's
+      // own complaint about the unwritable file went to a pipe whose reader had
+      // gone, and SIGPIPE ended it before the exec.
+      const dir = scratch('rommix-both-')
+      writeFileSync(join(dir, 'rommix'), readFileSync(LAUNCHER))
+      chmodSync(join(dir, 'rommix'), 0o755)
+      writeFileSync(join(dir, 'rommix.bin'), `#!/bin/sh\nprintf '%s\\n' "$@" > ${dir}/argv\n`)
+      chmodSync(join(dir, 'rommix.bin'), 0o755)
 
-    execFileSync('sh', ['-c', `{ "${join(dir, 'rommix')}" 2>&1 1>/dev/null; } | head -0`], {
-      env: {
-        PATH: process.env.PATH ?? '',
-        HOME: join(dir, 'home'),
-        XDG_RUNTIME_DIR: dir,
-        XDG_SESSION_TYPE: 'wayland',
-        DISPLAY: ':0',
-        ROMMIX_HOME: '/proc/nowhere'
-      }
-    })
-    assert.deepEqual(readFileSync(join(dir, 'argv'), 'utf8').split('\n').filter(Boolean), [
-      '--ozone-platform=x11'
-    ])
-  })
+      execFileSync('sh', ['-c', `{ "${join(dir, 'rommix')}" 2>&1 1>/dev/null; } | head -0`], {
+        env: {
+          PATH: process.env.PATH ?? '',
+          HOME: join(dir, 'home'),
+          XDG_RUNTIME_DIR: dir,
+          XDG_SESSION_TYPE: 'wayland',
+          DISPLAY: ':0',
+          ROMMIX_HOME: '/proc/nowhere'
+        }
+      })
+      assert.deepEqual(readFileSync(join(dir, 'argv'), 'utf8').split('\n').filter(Boolean), [
+        '--ozone-platform=x11'
+      ])
+    }
+  )
 
   test('and says nothing to the console about a file nobody asked it to write', () => {
     // A root on a disk that is not mounted used to be three "Permission denied"
@@ -300,7 +314,7 @@ describe('what it refuses to let stop a launch', () => {
     assert.match(run.stderr, /INFO {2}startup/)
   })
 
-  test('and it leaves the binary the signals it expects', () => {
+  test('and it leaves the binary the signals it expects', { skip: LINUX_ONLY }, () => {
     // An ignored disposition survives `exec`, and Chromium is entitled to the
     // default one.
     const dir = scratch('rommix-signals-')
